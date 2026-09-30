@@ -68,6 +68,8 @@ def run_migrations(sqlite_path: Path) -> None:
         execute(con, "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
         applied = {row["version"] for row in execute(con, "SELECT version FROM schema_migrations").fetchall()}
         for migration in sorted(migration_dir.glob("*.sql")):
+            if migration.name.endswith(".postgres.sql") and not uses_postgres(sqlite_path):
+                continue
             if migration.name in applied:
                 continue
             execute_script(con, migration.read_text())

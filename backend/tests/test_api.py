@@ -28,6 +28,15 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(TRANSITIONS["not_started"], {"attempted"})
         self.assertIn("reviewed_complete", TRANSITIONS["attempted"])
 
+    def test_scheduler_can_include_problems_without_topics(self):
+        selected = main.choose([
+            {"id": "untagged", "topics": []},
+            {"id": "arrays", "topics": ["arrays"]},
+            {"id": "graphs", "topics": ["graphs"]},
+        ])
+
+        self.assertEqual(set(selected), {"untagged", "arrays", "graphs"})
+
     def test_daily_digest_contains_each_problem_and_dashboard_link(self):
         message = build_daily_digest({"problems": [{"title": "Two Sum"}, {"title": "Coin Change"}]}, "https://console.example")
 

@@ -76,10 +76,35 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(progress["status"], "attempted")
         self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql"])
 
+    def test_problem_metadata_is_optional(self):
+        run_migrations(self.database_path)
+        with connection(self.database_path) as con:
+            execute(
+                con,
+                "INSERT INTO problems(id, title, prompt, topics, difficulty, companies, status, status_updated_at, created_at) VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?)",
+                ("custom", "Custom", "Prompt", "not_started", "now", "now"),
+            )
+
+        with connection(self.database_path) as con:
+            row = execute(con, "SELECT topics, difficulty, companies FROM problems WHERE id=?", ("custom",)).fetchone()
+        self.assertEqual(tuple(row), (None, None, None))
+
     def test_migration_files_remain_portable_to_postgresql(self):
         migration_dir = Path(__file__).resolve().parents[1] / "migrations"
-        migration = "\n".join(file.read_text() for file in migration_dir.glob("*.sql")).lower()
+        migration = "\n".join(file.read_text() for file in migration_dir.glob("*.sql") if not file.name.endswith(".postgres.sql")).lower()
 
         self.assertNotIn("autoincrement", migration)
         self.assertNotIn("pragma", migration)
         self.assertNotIn("sqlite_", migration)
+
+    def test_postgres_plan_migration_uses_a_native_id_array(self):
+        migration = (Path(__file__).resolve().parents[1] / "migrations" / "003_postgres_plan_arrays.postgres.sql").read_text()
+
+        self.assertIn("problem_ids TEXT[]", migration)
+
+    def test_postgres_integrity_migration_sets_problem_defaults_and_constraints(self):
+        migration = (Path(__file__).resolve().parents[1] / "migrations" / "004_problem_integrity.postgres.sql").read_text()
+
+        self.assertIn("SET DEFAULT CURRENT_TIMESTAMP", migration)
+        self.assertIn("problems_valid_status", migration)
+        self.assertIn("FOREIGN KEY (problem_id) REFERENCES problems(id)", migration)

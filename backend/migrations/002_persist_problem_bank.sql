@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS problems (
     title TEXT NOT NULL,
     prompt TEXT NOT NULL,
     link TEXT,
-    topics TEXT NOT NULL,
-    difficulty TEXT NOT NULL,
-    companies TEXT NOT NULL,
+    topics TEXT,
+    difficulty TEXT,
+    companies TEXT,
     status TEXT NOT NULL DEFAULT 'not_started',
     status_updated_at TEXT NOT NULL,
     created_at TEXT NOT NULL

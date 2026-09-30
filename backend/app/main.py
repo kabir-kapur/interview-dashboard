@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import Evaluation, StatusInput, SubmissionInput, TRANSITIONS
 from app.services.review_agent import review_submission
-from app.services.database import connection, execute, run_migrations
+from app.services.database import connection, execute, run_migrations, uses_postgres
 from app.services.auth import require_api_auth
 from app.services.scheduler import current_day
 
@@ -37,7 +37,8 @@ def serialize_problem(row):
     """Convert persisted problem fields into the dashboard response shape."""
     return {
         "id": row["id"], "title": row["title"], "prompt": row["prompt"], "link": row["link"],
-        "topics": json.loads(row["topics"]), "difficulty": row["difficulty"], "companies": json.loads(row["companies"]),
+        "topics": json.loads(row["topics"]) if row["topics"] else [], "difficulty": row["difficulty"],
+        "companies": json.loads(row["companies"]) if row["companies"] else [],
         "status": row["status"],
     }
 
@@ -58,14 +59,31 @@ def choose(bank):
         choices = [problem for problem in buckets[topic] if problem not in picked]
         if choices: picked.append(random.choice(choices))
         if len(picked) == 3: break
+    remaining = [problem for problem in bank if problem not in picked]
+    picked.extend(random.sample(remaining, min(3 - len(picked), len(remaining))))
     return [problem["id"] for problem in picked]
+
+
+def saved_plan_ids(row):
+    """Read the database-specific plan array into a regular Python list."""
+    return row["problem_ids"] if uses_postgres(DB) else json.loads(row["ids"])
+
+
+def save_plan(con, day, problem_ids):
+    """Persist the chosen IDs while retaining a lightweight SQLite fallback."""
+    if uses_postgres(DB):
+        execute(con, "INSERT INTO daily_plans(day, problem_ids) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET problem_ids=excluded.problem_ids", (day, problem_ids))
+    else:
+        execute(con, "INSERT INTO daily_plans(day, ids) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET ids=excluded.ids", (day, json.dumps(problem_ids)))
+
+
 def daily(refresh=False):
     day = current_day()
     with db() as con:
         bank = problems(con); lookup = {item["id"]: item for item in bank}
-        row = execute(con, "SELECT ids FROM daily_plans WHERE day=?", (day,)).fetchone(); ids = json.loads(row["ids"]) if row else []
+        row = execute(con, "SELECT * FROM daily_plans WHERE day=?", (day,)).fetchone(); ids = saved_plan_ids(row) if row else []
         if refresh or not row or any(item not in lookup for item in ids):
-            ids = choose(bank); execute(con, "INSERT INTO daily_plans(day, ids) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET ids=excluded.ids", (day, json.dumps(ids)))
+            ids = choose(bank); save_plan(con, day, ids)
         return {"date": day, "problems": [{**lookup[item], "latestSubmission": serialize_submission(execute(con, "SELECT * FROM submissions WHERE problem_id=? ORDER BY created_at DESC LIMIT 1", (item,)).fetchone())} for item in ids]}
 
 @app.on_event("startup")
