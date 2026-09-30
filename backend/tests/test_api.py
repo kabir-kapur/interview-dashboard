@@ -98,6 +98,12 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_cors_reads_the_configured_frontend_origins(self):
+        with patch.dict("os.environ", {"CORS_ORIGINS": "https://dashboard.example"}):
+            origins = main.cors_origins()
+
+        self.assertEqual(origins, ["https://dashboard.example"])
+
     def test_api_rejects_missing_or_invalid_credentials(self):
         missing = self.client.get("/api/daily", headers={"Authorization": ""})
         invalid_token = b64encode(b"test-user:wrong-password").decode()

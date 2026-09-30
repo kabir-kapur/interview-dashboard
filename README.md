@@ -39,7 +39,7 @@ PostgreSQL uses the `psycopg` driver listed in `backend/requirements.txt`; it is
 
 All API routes except `GET /api/health` require HTTP Basic authentication. Set `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` as private environment variables locally and in Vercel. The API fails closed with a configuration error if either value is missing.
 
-For deployment, route the frontend and API through the same Vercel domain so the browser can retain the Basic-auth challenge. Do not expose these variables through `NEXT_PUBLIC_` environment variables.
+For deployment, set `CORS_ORIGINS` to your frontend URL, for example `https://your-dashboard.vercel.app`. You may provide multiple comma-separated URLs for preview deployments. Do not expose API credentials through `NEXT_PUBLIC_` environment variables.
 
 ## Daily plan schedule
 

@@ -1,4 +1,4 @@
-import csv, json, random, uuid
+import csv, json, os, random, uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -13,7 +13,15 @@ from app.services.scheduler import current_day
 ROOT = Path(__file__).resolve().parents[1]
 DB, BANK = ROOT / "data/interview_console.db", ROOT / "data/problem-bank.csv"
 app = FastAPI(title="Interview Console API")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], allow_methods=["*"], allow_headers=["*"])
+
+
+def cors_origins() -> list[str]:
+    """Read the browser origins permitted to call this API."""
+    configured = os.getenv("CORS_ORIGINS")
+    return [origin.strip() for origin in configured.split(",") if origin.strip()] if configured else ["http://localhost:3000"]
+
+
+app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["*"], allow_headers=["*"])
 api = APIRouter(prefix="/api", dependencies=[Depends(require_api_auth)])
 
 def db():
