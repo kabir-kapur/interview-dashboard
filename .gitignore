@@ -1,0 +1,5 @@
+node_modules/
+frontend/.next/
+backend/.venv/
+backend/data/interview_console.db
+.env

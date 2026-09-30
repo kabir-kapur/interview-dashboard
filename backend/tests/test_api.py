@@ -1,0 +1,115 @@
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app import main
+from app.models import Evaluation, TRANSITIONS
+from app.services.sms import SmsNotConfigured, build_daily_digest, send_sms
+from app.services.scheduler import current_day
+from app.services.digest_delivery import claim_delivery, initialize_delivery_table, mark_failed, mark_sent
+from app.services.database import connection, execute, run_migrations, target
+
+
+class ModelTests(unittest.TestCase):
+    def test_evaluation_allows_unassessable_submission(self):
+        evaluation = Evaluation(retryRecommended=True)
+
+        self.assertTrue(evaluation.retryRecommended)
+        self.assertIsNone(evaluation.correctness)
+        self.assertIsNone(evaluation.betterApproach)
+
+    def test_status_state_machine_requires_an_attempt_before_solving(self):
+        self.assertEqual(TRANSITIONS["not_started"], {"attempted"})
+        self.assertIn("reviewed_complete", TRANSITIONS["attempted"])
+
+    def test_daily_digest_contains_each_problem_and_dashboard_link(self):
+        message = build_daily_digest({"problems": [{"title": "Two Sum"}, {"title": "Coin Change"}]}, "https://console.example")
+
+        self.assertIn("Two Sum · Coin Change", message)
+        self.assertIn("https://console.example", message)
+
+    def test_sms_requires_configuration_before_a_network_request(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(SmsNotConfigured):
+                send_sms("test")
+
+    def test_scheduler_uses_an_iso_local_day(self):
+        with patch.dict("os.environ", {"APP_TIMEZONE": "America/Los_Angeles"}):
+            self.assertRegex(current_day(), r"^\d{4}-\d{2}-\d{2}$")
+
+    def test_delivery_claim_deduplicates_sent_digests_and_allows_failed_retries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "deliveries.db"
+            initialize_delivery_table(database_path)
+            self.assertTrue(claim_delivery(database_path, "2026-09-30", "sms", "first"))
+            self.assertFalse(claim_delivery(database_path, "2026-09-30", "sms", "second"))
+            mark_failed(database_path, "2026-09-30", "sms", "timeout")
+            self.assertTrue(claim_delivery(database_path, "2026-09-30", "sms", "third"))
+            mark_sent(database_path, "2026-09-30", "sms", "SM123", "sent")
+            self.assertFalse(claim_delivery(database_path, "2026-09-30", "sms", "fourth"))
+
+    def test_migrations_create_schema_and_are_idempotent_for_sqlite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "console.db"
+            run_migrations(database_path)
+            run_migrations(database_path)
+            with connection(database_path) as con:
+                versions = execute(con, "SELECT version FROM schema_migrations").fetchall()
+                tables = execute(con, "SELECT name FROM sqlite_master WHERE type='table' AND name='submissions'").fetchall()
+
+            self.assertEqual([row["version"] for row in versions], ["001_initial.sql"])
+            self.assertTrue(tables)
+
+    def test_database_url_overrides_local_sqlite_path(self):
+        with patch.dict("os.environ", {"DATABASE_URL": "postgresql://example"}):
+            self.assertEqual(target(Path("local.db")), "postgresql://example")
+
+
+class ApiTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.original_db = main.DB
+        main.DB = Path(self.temp_dir.name) / "test.db"
+        self.client = TestClient(main.app)
+        self.client.__enter__()
+
+    def tearDown(self):
+        self.client.__exit__(None, None, None)
+        main.DB = self.original_db
+        self.temp_dir.cleanup()
+
+    def test_daily_endpoint_returns_three_topic_diverse_problems(self):
+        response = self.client.get("/api/daily")
+
+        self.assertEqual(response.status_code, 200)
+        problems = response.json()["problems"]
+        self.assertEqual(len(problems), 3)
+        self.assertEqual(len({problem["id"] for problem in problems}), 3)
+
+    def test_submission_then_review_updates_problem_status(self):
+        problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]
+        submission = self.client.post(
+            f"/api/problems/{problem_id}/submissions",
+            json={"code": "return answer", "timeComplexity": "O(n)"},
+        )
+
+        self.assertEqual(submission.status_code, 200)
+        reviewed = self.client.post(f"/api/submissions/{submission.json()['id']}/review")
+
+        self.assertEqual(reviewed.status_code, 200)
+        daily_problem = next(problem for problem in self.client.get("/api/daily").json()["problems"] if problem["id"] == problem_id)
+        self.assertEqual(daily_problem["status"], "reviewed_needs_retry")
+        self.assertTrue(daily_problem["latestSubmission"]["evaluation"]["retryRecommended"])
+
+    def test_cannot_mark_unstarted_problem_as_solved(self):
+        problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]
+
+        response = self.client.put(f"/api/problems/{problem_id}/status", json={"status": "solved"})
+
+        self.assertEqual(response.status_code, 409)

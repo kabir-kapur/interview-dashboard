@@ -1,0 +1,9 @@
+id,title,prompt,link,topics,difficulty,companies
+two-sum,Two Sum,"Given an array of integers and a target, return indices of two values whose sum equals the target.",https://leetcode.com/problems/two-sum/,arrays;hash map,Easy,Meta;Amazon
+valid-parentheses,Valid Parentheses,"Determine whether a string containing brackets is valid and properly nested.",https://leetcode.com/problems/valid-parentheses/,stack;strings,Easy,Google
+longest-substring,Longest Substring Without Repeating Characters,"Find the length of the longest substring with no repeated characters.",https://leetcode.com/problems/longest-substring-without-repeating-characters/,sliding window;hash map,Medium,Amazon;Microsoft
+merge-intervals,Merge Intervals,"Merge all overlapping intervals in a list of intervals.",https://leetcode.com/problems/merge-intervals/,intervals;sorting,Medium,Meta
+number-of-islands,Number of Islands,"Count islands in a grid of land and water cells.",https://leetcode.com/problems/number-of-islands/,graphs;dfs,Medium,Amazon;Google
+binary-tree-level-order,Binary Tree Level Order Traversal,"Return the nodes of a binary tree level by level.",https://leetcode.com/problems/binary-tree-level-order-traversal/,trees;bfs,Medium,Microsoft
+coin-change,Coin Change,"Find the fewest coins needed to make a given amount, or return -1 if it is impossible.",https://leetcode.com/problems/coin-change/,dynamic programming,Medium,Uber
+kth-largest,Kth Largest Element in an Array,"Return the kth largest element in an unsorted array.",https://leetcode.com/problems/kth-largest-element-in-an-array/,heap;arrays,Medium,Meta;Amazon
