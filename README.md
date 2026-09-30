@@ -35,6 +35,12 @@ Problem history, daily plans, statuses, and reviews persist in `backend/data/int
 
 PostgreSQL uses the `psycopg` driver listed in `backend/requirements.txt`; it is the only added production dependency and is loaded only when `DATABASE_URL` is configured.
 
+## API authentication
+
+All API routes except `GET /api/health` require HTTP Basic authentication. Set `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` as private environment variables locally and in Vercel. The API fails closed with a configuration error if either value is missing.
+
+For deployment, route the frontend and API through the same Vercel domain so the browser can retain the Basic-auth challenge. Do not expose these variables through `NEXT_PUBLIC_` environment variables.
+
 ## Daily plan schedule
 
 The plan generator is idempotent: it creates the configured local day's plan only if one does not already exist. Schedule it at 4:00 AM in the deployment's scheduler, with `APP_TIMEZONE` set to your preferred IANA timezone (default: `America/Los_Angeles`):

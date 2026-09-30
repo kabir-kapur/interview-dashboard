@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from base64 import b64encode
 from pathlib import Path
 from unittest.mock import patch
 
@@ -76,13 +77,41 @@ class ApiTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db = main.DB
         main.DB = Path(self.temp_dir.name) / "test.db"
+        self.auth_environment = patch.dict(
+            "os.environ",
+            {"BASIC_AUTH_USERNAME": "test-user", "BASIC_AUTH_PASSWORD": "test-password"},
+        )
+        self.auth_environment.start()
         self.client = TestClient(main.app)
         self.client.__enter__()
+        token = b64encode(b"test-user:test-password").decode()
+        self.client.headers.update({"Authorization": f"Basic {token}"})
 
     def tearDown(self):
         self.client.__exit__(None, None, None)
+        self.auth_environment.stop()
         main.DB = self.original_db
         self.temp_dir.cleanup()
+
+    def test_health_check_is_public(self):
+        response = self.client.get("/api/health", headers={"Authorization": ""})
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_api_rejects_missing_or_invalid_credentials(self):
+        missing = self.client.get("/api/daily", headers={"Authorization": ""})
+        invalid_token = b64encode(b"test-user:wrong-password").decode()
+        invalid = self.client.get("/api/daily", headers={"Authorization": f"Basic {invalid_token}"})
+
+        self.assertEqual(missing.status_code, 401)
+        self.assertEqual(missing.headers["www-authenticate"], "Basic")
+        self.assertEqual(invalid.status_code, 401)
+
+    def test_api_fails_closed_when_authentication_is_not_configured(self):
+        with patch.dict("os.environ", {}, clear=True):
+            response = self.client.get("/api/daily")
+
+        self.assertEqual(response.status_code, 503)
 
     def test_daily_endpoint_returns_three_topic_diverse_problems(self):
         response = self.client.get("/api/daily")

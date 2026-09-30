@@ -1,18 +1,20 @@
 import csv, json, random, uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import Evaluation, StatusInput, SubmissionInput, TRANSITIONS
 from app.services.review_agent import review_submission
 from app.services.database import connection, execute, run_migrations
+from app.services.auth import require_api_auth
 from app.services.scheduler import current_day
 
 ROOT = Path(__file__).resolve().parents[1]
 DB, BANK = ROOT / "data/interview_console.db", ROOT / "data/problem-bank.csv"
 app = FastAPI(title="Interview Console API")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], allow_methods=["*"], allow_headers=["*"])
+api = APIRouter(prefix="/api", dependencies=[Depends(require_api_auth)])
 
 def db():
     """Return a transaction for the configured PostgreSQL or local SQLite database."""
@@ -51,11 +53,11 @@ def daily(refresh=False):
 def startup(): initialize()
 @app.get("/api/health")
 def health(): return {"ok": True}
-@app.get("/api/daily")
+@api.get("/daily")
 def get_daily(): return daily()
-@app.post("/api/daily/refresh")
+@api.post("/daily/refresh")
 def refresh_daily(): return daily(True)
-@app.put("/api/problems/{problem_id}/status")
+@api.put("/problems/{problem_id}/status")
 def set_status(problem_id: str, body: StatusInput):
     if problem_id not in {item["id"] for item in problems()}: raise HTTPException(404, "Problem not found")
     with db() as con:
@@ -63,7 +65,7 @@ def set_status(problem_id: str, body: StatusInput):
         if body.status != "not_started" and body.status not in TRANSITIONS[current]: raise HTTPException(409, "Invalid status transition")
         execute(con, "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, ?, ?) ON CONFLICT(problem_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at", (problem_id, body.status, now()))
     return {"status": body.status}
-@app.post("/api/problems/{problem_id}/submissions")
+@api.post("/problems/{problem_id}/submissions")
 def create_submission(problem_id: str, body: SubmissionInput):
     if problem_id not in {item["id"] for item in problems()}: raise HTTPException(404, "Problem not found")
     submission_id, created = str(uuid.uuid4()), now()
@@ -71,7 +73,7 @@ def create_submission(problem_id: str, body: SubmissionInput):
         execute(con, "INSERT INTO submissions VALUES (?,?,?,?,?,?,?,NULL)", (submission_id, problem_id, created, body.code, body.timeComplexity, body.spaceComplexity, body.explanation))
         execute(con, "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, 'attempted', ?) ON CONFLICT(problem_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at", (problem_id, created))
     return {"id": submission_id, "problemId": problem_id, "createdAt": created, **body.model_dump(), "evaluation": None}
-@app.post("/api/submissions/{submission_id}/review")
+@api.post("/submissions/{submission_id}/review")
 def request_review(submission_id: str):
     with db() as con:
         row = execute(con, "SELECT * FROM submissions WHERE id=?", (submission_id,)).fetchone()
@@ -82,3 +84,6 @@ def request_review(submission_id: str):
         execute(con, "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, ?, ?) ON CONFLICT(problem_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at", (row["problem_id"], state, now()))
         row = execute(con, "SELECT * FROM submissions WHERE id=?", (submission_id,)).fetchone()
     return serialize_submission(row)
+
+
+app.include_router(api)
