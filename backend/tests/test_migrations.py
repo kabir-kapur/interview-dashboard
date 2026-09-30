@@ -23,8 +23,19 @@ class MigrationTests(unittest.TestCase):
         run_migrations(self.database_path)
 
         expected = {
-            "plans": {"day", "ids"},
-            "progress": {"problem_id", "status", "updated_at"},
+            "daily_plans": {"day", "ids"},
+            "problems": {
+                "id",
+                "title",
+                "prompt",
+                "link",
+                "topics",
+                "difficulty",
+                "companies",
+                "status",
+                "status_updated_at",
+                "created_at",
+            },
             "submissions": {
                 "id",
                 "problem_id",
@@ -35,44 +46,40 @@ class MigrationTests(unittest.TestCase):
                 "explanation",
                 "evaluation",
             },
-            "digest_deliveries": {
-                "day",
-                "channel",
-                "status",
-                "provider_message_id",
-                "attempted_at",
-                "sent_at",
-                "error_message",
-            },
         }
 
         with connection(self.database_path) as con:
             for table, columns in expected.items():
                 actual = {row["name"] for row in execute(con, f"PRAGMA table_info({table})").fetchall()}
                 self.assertEqual(actual, columns)
+            seeded = execute(con, "SELECT COUNT(*) AS count FROM problems").fetchone()
+            tables = {row["name"] for row in execute(con, "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
+        self.assertEqual(seeded["count"], 8)
+        self.assertNotIn("progress", tables)
+        self.assertNotIn("digest_deliveries", tables)
     def test_rerunning_migrations_preserves_existing_data_and_records_one_version(self):
         run_migrations(self.database_path)
         with connection(self.database_path) as con:
             execute(
                 con,
-                "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, ?, ?)",
-                ("two-sum", "attempted", "2026-09-30T12:00:00+00:00"),
+                "UPDATE problems SET status=? WHERE id=?",
+                ("attempted", "two-sum"),
             )
 
         run_migrations(self.database_path)
 
         with connection(self.database_path) as con:
-            progress = execute(con, "SELECT status FROM progress WHERE problem_id=?", ("two-sum",)).fetchone()
+            progress = execute(con, "SELECT status FROM problems WHERE id=?", ("two-sum",)).fetchone()
             versions = execute(con, "SELECT version FROM schema_migrations ORDER BY version").fetchall()
 
         self.assertEqual(progress["status"], "attempted")
-        self.assertEqual([row["version"] for row in versions], ["001_initial.sql"])
+        self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql"])
 
     def test_migration_files_remain_portable_to_postgresql(self):
-        migration = (Path(__file__).resolve().parents[1] / "migrations" / "001_initial.sql").read_text().lower()
+        migration_dir = Path(__file__).resolve().parents[1] / "migrations"
+        migration = "\n".join(file.read_text() for file in migration_dir.glob("*.sql")).lower()
 
         self.assertNotIn("autoincrement", migration)
         self.assertNotIn("pragma", migration)
         self.assertNotIn("sqlite_", migration)
-

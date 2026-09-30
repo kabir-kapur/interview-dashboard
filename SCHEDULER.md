@@ -5,7 +5,7 @@ The scheduler runs when the daily digest job is triggered by the deployment plat
 ## Schedule
 
 - Generate the daily plan at **04:00** in `APP_TIMEZONE`.
-- Send the SMS digest at the chosen notification time, initially recommended as **09:00** in the same timezone.
+- SMS delivery is deferred until deployment. The current sender can be invoked manually after a plan exists.
 - The deployment scheduler (cron, platform scheduler, or worker) triggers the commands; the FastAPI web process does not keep its own timer.
 
 ## Generate-plan job
@@ -22,34 +22,14 @@ This makes repeated triggers safe. A redeploy or scheduler retry cannot replace 
 
 ## Send-digest job
 
-`send_daily_digest.py --send` should perform these steps:
+`send_daily_digest.py --send` currently performs these steps:
 
 1. Resolve the local date using `APP_TIMEZONE`.
 2. Ensure the daily plan exists by invoking the same generate-plan operation.
-3. Check whether a successful `sms_daily_digest` delivery record already exists for that date.
-4. If delivered already, exit successfully without sending another message.
-5. Build the message from the persisted plan and dashboard URL.
-6. Send through the configured SMS provider.
-7. Persist the provider message ID and delivery timestamp on success.
-8. On a transient provider failure, return a non-zero exit code so the deployment scheduler can retry.
+3. Build the message from the persisted plan and dashboard URL.
+4. Send through the configured SMS provider.
 
-## Persistence to add before enabling `--send`
-
-Add a `digest_deliveries` SQLite table:
-
-```text
-date              TEXT
-channel           TEXT         # e.g. sms_daily_digest
-status            TEXT         # sent | failed
-provider_message_id TEXT NULL
-attempted_at      TEXT
-sent_at           TEXT NULL
-error_message     TEXT NULL
-
-PRIMARY KEY (date, channel)
-```
-
-The `(date, channel)` key prevents duplicate sends when a job overlaps, retries, or is invoked manually. Store failed attempts too, but only treat `sent` as a deduplication success.
+There is intentionally no persistence or deduplication for SMS delivery yet. Do not schedule `--send` until we choose how delivery retry behavior should work.
 
 ## Initial deployment schedule
 
@@ -57,8 +37,6 @@ The `(date, channel)` key prevents duplicate sends when a job overlaps, retries,
 # Create today’s stable plan.
 0 4 * * * APP_TIMEZONE=America/Los_Angeles /path/to/backend/.venv/bin/python /path/to/backend/scripts/generate_daily_plan.py
 
-# Send the already-created plan.
-0 9 * * * APP_TIMEZONE=America/Los_Angeles /path/to/backend/.venv/bin/python /path/to/backend/scripts/send_daily_digest.py --dashboard-url https://your-dashboard.example --send
 ```
 
-Use deployment-managed environment variables for Twilio credentials. Do not put credentials in the cron line or repository.
+Use deployment-managed environment variables for future Twilio credentials. Do not put credentials in a cron line or repository.

@@ -13,7 +13,6 @@ from app import main
 from app.models import Evaluation, TRANSITIONS
 from app.services.sms import SmsNotConfigured, build_daily_digest, send_sms
 from app.services.scheduler import current_day
-from app.services.digest_delivery import claim_delivery, initialize_delivery_table, mark_failed, mark_sent
 from app.services.database import connection, execute, run_migrations, target
 
 
@@ -44,17 +43,6 @@ class ModelTests(unittest.TestCase):
         with patch.dict("os.environ", {"APP_TIMEZONE": "America/Los_Angeles"}):
             self.assertRegex(current_day(), r"^\d{4}-\d{2}-\d{2}$")
 
-    def test_delivery_claim_deduplicates_sent_digests_and_allows_failed_retries(self):
-        with tempfile.TemporaryDirectory() as directory:
-            database_path = Path(directory) / "deliveries.db"
-            initialize_delivery_table(database_path)
-            self.assertTrue(claim_delivery(database_path, "2026-09-30", "sms", "first"))
-            self.assertFalse(claim_delivery(database_path, "2026-09-30", "sms", "second"))
-            mark_failed(database_path, "2026-09-30", "sms", "timeout")
-            self.assertTrue(claim_delivery(database_path, "2026-09-30", "sms", "third"))
-            mark_sent(database_path, "2026-09-30", "sms", "SM123", "sent")
-            self.assertFalse(claim_delivery(database_path, "2026-09-30", "sms", "fourth"))
-
     def test_migrations_create_schema_and_are_idempotent_for_sqlite(self):
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "console.db"
@@ -64,7 +52,7 @@ class ModelTests(unittest.TestCase):
                 versions = execute(con, "SELECT version FROM schema_migrations").fetchall()
                 tables = execute(con, "SELECT name FROM sqlite_master WHERE type='table' AND name='submissions'").fetchall()
 
-            self.assertEqual([row["version"] for row in versions], ["001_initial.sql"])
+            self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql"])
             self.assertTrue(tables)
 
     def test_database_url_overrides_local_sqlite_path(self):

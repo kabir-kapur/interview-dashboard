@@ -1,4 +1,4 @@
-import csv, json, os, random, uuid
+import json, os, random, uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -11,7 +11,7 @@ from app.services.auth import require_api_auth
 from app.services.scheduler import current_day
 
 ROOT = Path(__file__).resolve().parents[1]
-DB, BANK = ROOT / "data/interview_console.db", ROOT / "data/problem-bank.csv"
+DB = ROOT / "data/interview_console.db"
 app = FastAPI(title="Interview Console API")
 
 
@@ -28,15 +28,25 @@ def db():
     """Return a transaction for the configured PostgreSQL or local SQLite database."""
     return connection(DB)
 def now(): return datetime.now(timezone.utc).isoformat()
-def values(text): return [item.strip() for item in text.split(";") if item.strip()]
-def problems():
-    with BANK.open(newline="") as file:
-        return [{**row, "link": row["link"] or None, "topics": values(row["topics"]), "companies": values(row["companies"])} for row in csv.DictReader(file)]
 def initialize():
     """Ensure the configured database has every known schema migration."""
     run_migrations(DB)
-def status(con, problem_id):
-    row = execute(con, "SELECT status FROM progress WHERE problem_id=?", (problem_id,)).fetchone(); return row["status"] if row else "not_started"
+
+
+def serialize_problem(row):
+    """Convert persisted problem fields into the dashboard response shape."""
+    return {
+        "id": row["id"], "title": row["title"], "prompt": row["prompt"], "link": row["link"],
+        "topics": json.loads(row["topics"]), "difficulty": row["difficulty"], "companies": json.loads(row["companies"]),
+        "status": row["status"],
+    }
+
+
+def problems(con):
+    """Load the canonical problem bank from the configured database."""
+    return [serialize_problem(row) for row in execute(con, "SELECT * FROM problems ORDER BY title").fetchall()]
+
+
 def serialize_submission(row):
     return None if not row else {"id": row["id"], "problemId": row["problem_id"], "createdAt": row["created_at"], "code": row["code"], "timeComplexity": row["time_complexity"], "spaceComplexity": row["space_complexity"], "explanation": row["explanation"], "evaluation": json.loads(row["evaluation"]) if row["evaluation"] else None}
 def choose(bank):
@@ -50,12 +60,13 @@ def choose(bank):
         if len(picked) == 3: break
     return [problem["id"] for problem in picked]
 def daily(refresh=False):
-    bank = problems(); lookup = {item["id"]: item for item in bank}; day = current_day()
+    day = current_day()
     with db() as con:
-        row = execute(con, "SELECT ids FROM plans WHERE day=?", (day,)).fetchone(); ids = json.loads(row["ids"]) if row else []
+        bank = problems(con); lookup = {item["id"]: item for item in bank}
+        row = execute(con, "SELECT ids FROM daily_plans WHERE day=?", (day,)).fetchone(); ids = json.loads(row["ids"]) if row else []
         if refresh or not row or any(item not in lookup for item in ids):
-            ids = choose(bank); execute(con, "INSERT INTO plans(day, ids) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET ids=excluded.ids", (day, json.dumps(ids)))
-        return {"date": day, "problems": [{**lookup[item], "status": status(con, item), "latestSubmission": serialize_submission(execute(con, "SELECT * FROM submissions WHERE problem_id=? ORDER BY created_at DESC LIMIT 1", (item,)).fetchone())} for item in ids]}
+            ids = choose(bank); execute(con, "INSERT INTO daily_plans(day, ids) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET ids=excluded.ids", (day, json.dumps(ids)))
+        return {"date": day, "problems": [{**lookup[item], "latestSubmission": serialize_submission(execute(con, "SELECT * FROM submissions WHERE problem_id=? ORDER BY created_at DESC LIMIT 1", (item,)).fetchone())} for item in ids]}
 
 @app.on_event("startup")
 def startup(): initialize()
@@ -67,19 +78,20 @@ def get_daily(): return daily()
 def refresh_daily(): return daily(True)
 @api.put("/problems/{problem_id}/status")
 def set_status(problem_id: str, body: StatusInput):
-    if problem_id not in {item["id"] for item in problems()}: raise HTTPException(404, "Problem not found")
     with db() as con:
-        current = status(con, problem_id)
+        row = execute(con, "SELECT status FROM problems WHERE id=?", (problem_id,)).fetchone()
+        if not row: raise HTTPException(404, "Problem not found")
+        current = row["status"]
         if body.status != "not_started" and body.status not in TRANSITIONS[current]: raise HTTPException(409, "Invalid status transition")
-        execute(con, "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, ?, ?) ON CONFLICT(problem_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at", (problem_id, body.status, now()))
+        execute(con, "UPDATE problems SET status=?, status_updated_at=? WHERE id=?", (body.status, now(), problem_id))
     return {"status": body.status}
 @api.post("/problems/{problem_id}/submissions")
 def create_submission(problem_id: str, body: SubmissionInput):
-    if problem_id not in {item["id"] for item in problems()}: raise HTTPException(404, "Problem not found")
     submission_id, created = str(uuid.uuid4()), now()
     with db() as con:
+        if not execute(con, "SELECT id FROM problems WHERE id=?", (problem_id,)).fetchone(): raise HTTPException(404, "Problem not found")
         execute(con, "INSERT INTO submissions VALUES (?,?,?,?,?,?,?,NULL)", (submission_id, problem_id, created, body.code, body.timeComplexity, body.spaceComplexity, body.explanation))
-        execute(con, "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, 'attempted', ?) ON CONFLICT(problem_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at", (problem_id, created))
+        execute(con, "UPDATE problems SET status='attempted', status_updated_at=? WHERE id=?", (created, problem_id))
     return {"id": submission_id, "problemId": problem_id, "createdAt": created, **body.model_dump(), "evaluation": None}
 @api.post("/submissions/{submission_id}/review")
 def request_review(submission_id: str):
@@ -89,7 +101,7 @@ def request_review(submission_id: str):
         evaluation = review_submission(serialize_submission(row))
         execute(con, "UPDATE submissions SET evaluation=? WHERE id=?", (evaluation.model_dump_json(exclude_none=True), submission_id))
         state = "reviewed_needs_retry" if evaluation.retryRecommended else "reviewed_complete"
-        execute(con, "INSERT INTO progress(problem_id, status, updated_at) VALUES (?, ?, ?) ON CONFLICT(problem_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at", (row["problem_id"], state, now()))
+        execute(con, "UPDATE problems SET status=?, status_updated_at=? WHERE id=?", (state, now(), row["problem_id"]))
         row = execute(con, "SELECT * FROM submissions WHERE id=?", (submission_id,)).fetchone()
     return serialize_submission(row)
 

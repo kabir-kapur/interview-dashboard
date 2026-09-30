@@ -11,12 +11,10 @@
 │   ├── app/models/           # Typed API models and status state machine
 │   ├── app/services/database.py # SQLite fallback/PostgreSQL connection and migration runner
 │   ├── app/services/sms.py    # Twilio digest composition and delivery
-│   ├── app/services/digest_delivery.py # Idempotent digest send tracking
 │   ├── app/services/scheduler.py # Local-time daily scheduling support
-│   └── data/problem-bank.csv # Editable problem source
-├── backend/migrations/        # Immutable, ordered SQL schema migrations
-├── backend/scripts/           # Deployment-oriented command-line utilities
-├── backend/tests/             # Backend model and API unit tests
+│   ├── migrations/            # Ordered SQL schema and seed migrations
+│   ├── scripts/               # Deployment-oriented command-line utilities
+│   └── tests/                 # Backend model and API unit tests
 ├── package.json              # Frontend workspace scripts
 ├── SCHEDULER.md              # Daily plan and digest execution design
 ├── README.md           # Local run instructions and behavior
@@ -25,10 +23,10 @@
 
 ## Application layout
 
-- `problem-bank.csv` is the editable problem catalog; FastAPI reads it at request time.
+- `problems` is the canonical problem bank, seeded by migrations and editable in Supabase's Table Editor.
 - The backend scheduler samples across distinct topic buckets and is the intended extension point for spaced repetition or weak-topic weighting.
-- Daily plans, progress, and submissions use PostgreSQL when `DATABASE_URL` is configured, with SQLite retained as the local fallback.
-- `ProblemProgress.status` is the dashboard source of truth: `not_started`, `attempted`, `solved`, `reviewed_needs_retry`, or `reviewed_complete`.
+- Daily plans and submissions use PostgreSQL when `DATABASE_URL` is configured, with SQLite retained as the local fallback.
+- `Problem.status` is the dashboard source of truth: `not_started`, `attempted`, `solved`, `reviewed_needs_retry`, or `reviewed_complete`.
 - Submission evaluations have a required `retryRecommended` decision and optional assessment fields. Saving a review keeps that decision synchronized with the displayed reviewed status.
 
 ## Future extension points

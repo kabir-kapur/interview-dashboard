@@ -27,11 +27,11 @@ Open `http://localhost:3000`. The interactive FastAPI docs are at `http://localh
 backend/.venv/bin/python -m unittest discover backend/tests
 ```
 
-## Edit the problem bank
+## Problem bank and persistence
 
-Edit `backend/data/problem-bank.csv` in a spreadsheet or text editor, then refresh the browser. Preserve the header row. Separate multiple topics or companies with semicolons.
+Problems, daily plans, statuses, and submissions persist in the configured database. The initial migration seeds a small bank; edit it through Supabase's Table Editor until an admin page and bank-populator CLI are added.
 
-Problem history, daily plans, statuses, and reviews persist in `backend/data/interview_console.db` by default. Set `DATABASE_URL` to a PostgreSQL connection URL to use a hosted database; numbered migrations in `backend/migrations/` run automatically at API startup.
+Set `DATABASE_URL` to a PostgreSQL connection URL to use a hosted database; numbered migrations in `backend/migrations/` run automatically at API startup. Without it, the app uses `backend/data/interview_console.db` locally.
 
 PostgreSQL uses the `psycopg` driver listed in `backend/requirements.txt`; it is the only added production dependency and is loaded only when `DATABASE_URL` is configured.
 
@@ -71,4 +71,4 @@ A new submission can move any active problem back to `attempted`. A review must 
 
 ## Scope
 
-The review panel supports structured self-review. Its assessment fields are optional so incomplete submissions are not forced into fabricated feedback. The selected daily plan and all problem progress/submissions persist locally.
+The review panel displays structured agent feedback. Its assessment fields are optional so incomplete submissions are not forced into fabricated feedback. Daily plans, problems, and submissions persist in the configured database.
