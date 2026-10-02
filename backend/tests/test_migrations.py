@@ -29,6 +29,8 @@ class MigrationTests(unittest.TestCase):
                 "title",
                 "prompt",
                 "link",
+                "source_id",
+                "starter_code",
                 "topics",
                 "difficulty",
                 "companies",
@@ -74,7 +76,7 @@ class MigrationTests(unittest.TestCase):
             versions = execute(con, "SELECT version FROM schema_migrations ORDER BY version").fetchall()
 
         self.assertEqual(progress["status"], "attempted")
-        self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql"])
+        self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql"])
 
     def test_problem_metadata_is_optional(self):
         run_migrations(self.database_path)

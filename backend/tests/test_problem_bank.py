@@ -33,7 +33,8 @@ class ProblemBankTests(unittest.TestCase):
                 2: [{"title": "Free two", "titleSlug": "free-two", "paidOnly": False, "topicTags": []}],
             }.get(offset, [])
 
-        problems = collect_problems(2, fetcher)
+        details = lambda slug: {"questionFrontendId": slug, "content": f"<p>{slug}</p>", "codeSnippets": [{"langSlug": "python3", "code": "class Solution:"}]}
+        problems = collect_problems(2, fetcher, details)
 
         self.assertEqual([problem["id"] for problem in problems], ["free-one", "free-two"])
         self.assertEqual(calls, [0, 2])
@@ -41,7 +42,7 @@ class ProblemBankTests(unittest.TestCase):
     def test_upsert_preserves_status_while_refreshing_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "bank.db"
-            original = {"id": "two-sum", "title": "Two Sum", "prompt": "Old", "link": "https://old", "topics": ["Array"], "difficulty": "Easy", "companies": None}
+            original = {"id": "two-sum", "title": "Two Sum", "prompt": "Old", "link": "https://old", "source_id": "1", "starter_code": "class Solution:", "topics": ["Array"], "difficulty": "Easy", "companies": None}
             upsert_problems(database, [original])
             with connection(database) as con:
                 execute(con, "UPDATE problems SET status='attempted' WHERE id=?", (original["id"],))
@@ -53,3 +54,15 @@ class ProblemBankTests(unittest.TestCase):
         self.assertEqual(row["prompt"], "New")
         self.assertEqual(row["topics"], '["Hash Table"]')
         self.assertEqual(row["status"], "attempted")
+
+    def test_normalize_problem_sanitizes_html_and_reads_the_python_template(self):
+        problem = normalize_problem(
+            {"title": "Two Sum", "titleSlug": "two-sum", "difficulty": "EASY", "topicTags": []},
+            {"questionFrontendId": "1", "content": "<p>Find <code>two</code> values.</p><script>alert(1)</script>", "codeSnippets": [{"langSlug": "python", "code": "skip"}, {"langSlug": "python3", "code": "class Solution:"}]},
+        )
+
+        self.assertEqual(problem["source_id"], "1")
+        self.assertEqual(problem["starter_code"], "class Solution:")
+        self.assertEqual(problem["difficulty"], "Easy")
+        self.assertIn("<code>two</code>", problem["prompt"])
+        self.assertNotIn("<script>", problem["prompt"])

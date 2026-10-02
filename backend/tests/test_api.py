@@ -64,7 +64,7 @@ class ModelTests(unittest.TestCase):
                 versions = execute(con, "SELECT version FROM schema_migrations").fetchall()
                 tables = execute(con, "SELECT name FROM sqlite_master WHERE type='table' AND name='submissions'").fetchall()
 
-            self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql"])
+            self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql"])
             self.assertTrue(tables)
 
     def test_database_url_overrides_local_sqlite_path(self):

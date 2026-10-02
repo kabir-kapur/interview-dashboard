@@ -48,6 +48,7 @@ def serialize_problem(row):
     """Convert persisted problem fields into the dashboard response shape."""
     return {
         "id": row["id"], "title": row["title"], "prompt": row["prompt"], "link": row["link"],
+        "sourceId": row["source_id"], "starterCode": row["starter_code"],
         "topics": string_list(row["topics"]), "difficulty": row["difficulty"],
         "companies": string_list(row["companies"]),
         "status": row["status"],
