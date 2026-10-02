@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { ApiError } from "../lib/api";
 
 export function LoginForm({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) {
   const [error, setError] = useState("");
@@ -13,8 +14,8 @@ export function LoginForm({ onLogin }: { onLogin: (username: string, password: s
     setError("");
     try {
       await onLogin(String(data.get("username")), String(data.get("password")));
-    } catch {
-      setError("Those credentials were not accepted.");
+    } catch (loginError) {
+      setError(loginError instanceof ApiError && loginError.status === 401 ? "Those credentials were not accepted." : "The API could not load your problem set. Try again after it recovers.");
     } finally {
       setLoading(false);
     }

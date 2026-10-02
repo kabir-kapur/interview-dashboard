@@ -98,6 +98,12 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_session_check_requires_and_accepts_authentication(self):
+        response = self.client.get("/api/session")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+
     def test_cors_reads_the_configured_frontend_origins(self):
         with patch.dict("os.environ", {"CORS_ORIGINS": "https://dashboard.example"}):
             origins = main.cors_origins()

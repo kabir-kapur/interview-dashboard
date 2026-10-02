@@ -23,8 +23,7 @@ export default function Page() {
 
   const login = async (username: string, password: string) => {
     saveSessionCredentials(username, password);
-    const daily = await request("/daily");
-    setPlan(daily);
+    await request("/session");
     setAuthenticated(true);
   };
 

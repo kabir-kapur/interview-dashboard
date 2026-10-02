@@ -101,6 +101,8 @@ def daily(refresh=False):
 def startup(): initialize()
 @app.get("/api/health")
 def health(): return {"ok": True}
+@api.get("/session")
+def session(): return {"ok": True}
 @api.get("/daily")
 def get_daily(): return daily()
 @api.post("/daily/refresh")
