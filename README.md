@@ -72,3 +72,7 @@ A new submission can move any active problem back to `attempted`. A review must 
 ## Scope
 
 The review panel displays structured agent feedback. Its assessment fields are optional so incomplete submissions are not forced into fabricated feedback. Daily plans, problems, and submissions persist in the configured database.
+
+## Deferred work
+
+- Add a separately deployed, sandboxed Python 3 execution service to run a submission against test cases before review. Do not execute user code in the frontend or the primary API process.

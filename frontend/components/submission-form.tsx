@@ -1,21 +1,22 @@
-import { FormEvent, KeyboardEvent } from "react";
+"use client";
+
+import { python } from "@codemirror/lang-python";
+import { indentWithTab } from "@codemirror/commands";
+import { keymap } from "@codemirror/view";
+import CodeMirror from "@uiw/react-codemirror";
+import { FormEvent, useEffect, useState } from "react";
 import { Submission } from "../lib/types";
 
 export function SubmissionForm({ submission, onSubmit }: { submission?: Submission; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form onSubmit={onSubmit}><div className="heading"><h3>Submission</h3><button>Save submission</button></div><CodeField value={submission?.code} /><div className="grid"><Field name="time" label="Time complexity" value={submission?.timeComplexity} /><Field name="space" label="Space complexity" value={submission?.spaceComplexity} /></div><Field name="explanation" label="Explanation (optional)" value={submission?.explanation} /></form>;
+  const [code, setCode] = useState(submission?.code || "");
+
+  useEffect(() => setCode(submission?.code || ""), [submission?.id, submission?.code]);
+
+  return <form onSubmit={onSubmit}><div className="heading"><h3>Submission</h3><button>Save submission</button></div><CodeField value={code} onChange={setCode} /><input name="code" type="hidden" value={code} /><div className="grid"><Field name="time" label="Time complexity" value={submission?.timeComplexity} /><Field name="space" label="Space complexity" value={submission?.spaceComplexity} /></div><Field name="explanation" label="Explanation (optional)" value={submission?.explanation} /></form>;
 }
 
 function Field({ name, label, value, required }: { name: string; label: string; value?: string; required?: boolean }) { return <label>{label}<textarea required={required} name={name} defaultValue={value} /></label>; }
 
-function CodeField({ value }: { value?: string }) {
-  const indent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Tab") return;
-    event.preventDefault();
-    const field = event.currentTarget;
-    const before = field.value.slice(0, field.selectionStart);
-    const after = field.value.slice(field.selectionEnd);
-    field.value = `${before}    ${after}`;
-    field.selectionStart = field.selectionEnd = before.length + 4;
-  };
-  return <label>Code<textarea className="code-editor" required name="code" defaultValue={value} onKeyDown={indent} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" /></label>;
+function CodeField({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+  return <label>Code <span className="runtime-label">Python 3 runtime</span><CodeMirror className="code-editor" value={value} height="300px" theme="dark" extensions={[python(), keymap.of([indentWithTab])]} onChange={onChange} basicSetup={{ lineNumbers: true, bracketMatching: true, highlightActiveLine: true, indentOnInput: true }} /></label>;
 }
