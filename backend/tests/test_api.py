@@ -37,6 +37,9 @@ class ModelTests(unittest.TestCase):
 
         self.assertEqual(set(selected), {"untagged", "arrays", "graphs"})
 
+    def test_optional_problem_metadata_ignores_malformed_json(self):
+        self.assertEqual(main.string_list("[\"arrays\",\n"), [])
+
     def test_daily_digest_contains_each_problem_and_dashboard_link(self):
         message = build_daily_digest({"problems": [{"title": "Two Sum"}, {"title": "Coin Change"}]}, "https://console.example")
 

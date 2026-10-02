@@ -33,12 +33,23 @@ def initialize():
     run_migrations(DB)
 
 
+def string_list(value):
+    """Return optional JSON metadata as a safe list for API consumers."""
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed) else []
+
+
 def serialize_problem(row):
     """Convert persisted problem fields into the dashboard response shape."""
     return {
         "id": row["id"], "title": row["title"], "prompt": row["prompt"], "link": row["link"],
-        "topics": json.loads(row["topics"]) if row["topics"] else [], "difficulty": row["difficulty"],
-        "companies": json.loads(row["companies"]) if row["companies"] else [],
+        "topics": string_list(row["topics"]), "difficulty": row["difficulty"],
+        "companies": string_list(row["companies"]),
         "status": row["status"],
     }
 
