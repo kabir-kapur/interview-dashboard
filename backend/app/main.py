@@ -59,6 +59,19 @@ def problems(con):
     return [serialize_problem(row) for row in execute(con, "SELECT * FROM problems ORDER BY title").fetchall()]
 
 
+def problem_detail(con, problem_id):
+    """Load one persisted problem with its most recent submission."""
+    row = execute(con, "SELECT * FROM problems WHERE id=?", (problem_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Problem not found")
+    return {
+        **serialize_problem(row),
+        "latestSubmission": serialize_submission(
+            execute(con, "SELECT * FROM submissions WHERE problem_id=? ORDER BY created_at DESC LIMIT 1", (problem_id,)).fetchone()
+        ),
+    }
+
+
 def serialize_submission(row):
     return None if not row else {"id": row["id"], "problemId": row["problem_id"], "createdAt": row["created_at"], "code": row["code"], "timeComplexity": row["time_complexity"], "spaceComplexity": row["space_complexity"], "explanation": row["explanation"], "evaluation": json.loads(row["evaluation"]) if row["evaluation"] else None}
 def choose(bank):
@@ -105,6 +118,10 @@ def health(): return {"ok": True}
 def session(): return {"ok": True}
 @api.get("/daily")
 def get_daily(): return daily()
+@api.get("/problems/{problem_id}")
+def get_problem(problem_id: str):
+    with db() as con:
+        return problem_detail(con, problem_id)
 @api.post("/daily/refresh")
 def refresh_daily(): return daily(True)
 @api.put("/problems/{problem_id}/status")

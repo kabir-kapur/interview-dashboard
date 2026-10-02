@@ -133,6 +133,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(len(problems), 3)
         self.assertEqual(len({problem["id"] for problem in problems}), 3)
 
+    def test_problem_endpoint_returns_a_persisted_problem(self):
+        problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]
+
+        response = self.client.get(f"/api/problems/{problem_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], problem_id)
+
     def test_submission_then_review_updates_problem_status(self):
         problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]
         submission = self.client.post(

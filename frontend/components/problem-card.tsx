@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { Problem, statusLabels } from "../lib/types";
 
-export function ProblemCard({ problem, onOpen }: { problem: Problem; onOpen: () => void }) {
+export function ProblemCard({ problem }: { problem: Problem }) {
   const difficultyClass = problem.difficulty?.toLowerCase();
-  return <article className="card"><div><div className="badges">{problem.difficulty && <span className={difficultyClass}>{problem.difficulty}</span>}<span className={problem.status}>{statusLabels[problem.status]}</span></div><h3>{problem.title}</h3><p className="muted">{problem.prompt}</p></div><button onClick={onOpen}>Open</button></article>;
+  return <article className="card"><div><div className="badges">{problem.difficulty && <span className={difficultyClass}>{problem.difficulty}</span>}<span className={problem.status}>{statusLabels[problem.status]}</span></div><h3>{problem.title}</h3><p className="muted">{problem.prompt}</p></div><Link className="open-link" href={`/problems/${problem.id}`}>Open</Link></article>;
 }
