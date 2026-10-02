@@ -7,10 +7,10 @@ import CodeMirror from "@uiw/react-codemirror";
 import { FormEvent, useEffect, useState } from "react";
 import { Submission } from "../lib/types";
 
-export function SubmissionForm({ submission, onSubmit }: { submission?: Submission; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  const [code, setCode] = useState(submission?.code || "");
+export function SubmissionForm({ submission, starterCode, onSubmit }: { submission?: Submission; starterCode?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  const [code, setCode] = useState(submission?.code || starterCode || "");
 
-  useEffect(() => setCode(submission?.code || ""), [submission?.id, submission?.code]);
+  useEffect(() => setCode(submission?.code || starterCode || ""), [submission?.id, submission?.code, starterCode]);
 
   return <form onSubmit={onSubmit}><div className="heading"><h3>Submission</h3><button>Save submission</button></div><CodeField value={code} onChange={setCode} /><input name="code" type="hidden" value={code} /><div className="grid"><Field name="time" label="Time complexity" value={submission?.timeComplexity} /><Field name="space" label="Space complexity" value={submission?.spaceComplexity} /></div><Field name="explanation" label="Explanation (optional)" value={submission?.explanation} /></form>;
 }
