@@ -35,6 +35,12 @@ Set `DATABASE_URL` to a PostgreSQL connection URL to use a hosted database; numb
 
 PostgreSQL uses the `psycopg` driver listed in `backend/requirements.txt`; it is the only added production dependency and is loaded only when `DATABASE_URL` is configured.
 
+To populate the bank with static public LeetCode metadata, run the one-shot importer. It saves the resulting data to the configured database; after that, the dashboard does not depend on LeetCode at runtime. Re-running it refreshes metadata but preserves each problem's status.
+
+```sh
+DATABASE_URL='your Supabase connection URL' backend/.venv/bin/python backend/scripts/populate_problem_bank.py --limit 150
+```
+
 ## API authentication
 
 All API routes except `GET /api/health` require HTTP Basic authentication. Set `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` as private environment variables locally and in Vercel. The API fails closed with a configuration error if either value is missing. The frontend asks for those credentials once and keeps the resulting header only in browser session storage.
