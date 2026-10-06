@@ -81,4 +81,5 @@ The review panel displays structured agent feedback. Its assessment fields are o
 
 ## Deferred work
 
+- Refactor daily-plan selection to query only lightweight planning fields; load full HTML prompts and starter code only for the selected problem-detail page.
 - Add a separately deployed, sandboxed Python 3 execution service to run a submission against test cases before review. Do not execute user code in the frontend or the primary API process.
