@@ -79,7 +79,11 @@ class ApiTests(unittest.TestCase):
         main.DB = Path(self.temp_dir.name) / "test.db"
         self.auth_environment = patch.dict(
             "os.environ",
-            {"BASIC_AUTH_USERNAME": "test-user", "BASIC_AUTH_PASSWORD": "test-password"},
+            {
+                "BASIC_AUTH_USERNAME": "test-user",
+                "BASIC_AUTH_PASSWORD": "test-password",
+                "CRON_SECRET": "test-cron-secret",
+            },
         )
         self.auth_environment.start()
         self.client = TestClient(main.app)
@@ -124,6 +128,40 @@ class ApiTests(unittest.TestCase):
             response = self.client.get("/api/daily")
 
         self.assertEqual(response.status_code, 503)
+
+    def test_cron_requires_its_own_bearer_secret(self):
+        basic_auth = self.client.get("/api/cron/generate-daily-plan")
+        missing = self.client.get("/api/cron/generate-daily-plan", headers={"Authorization": ""})
+        invalid = self.client.get(
+            "/api/cron/generate-daily-plan",
+            headers={"Authorization": "Bearer wrong-secret"},
+        )
+
+        self.assertEqual(basic_auth.status_code, 401)
+        self.assertEqual(missing.status_code, 401)
+        self.assertEqual(invalid.status_code, 401)
+
+    def test_cron_fails_closed_without_a_configured_secret(self):
+        with patch.dict("os.environ", {"BASIC_AUTH_USERNAME": "test-user"}, clear=True):
+            response = self.client.get(
+                "/api/cron/generate-daily-plan",
+                headers={"Authorization": "Bearer test-cron-secret"},
+            )
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_cron_generates_one_idempotent_daily_plan(self):
+        headers = {"Authorization": "Bearer test-cron-secret"}
+        first = self.client.get("/api/cron/generate-daily-plan", headers=headers)
+        second = self.client.get("/api/cron/generate-daily-plan", headers=headers)
+        with connection(main.DB) as con:
+            count = execute(con, "SELECT COUNT(*) AS count FROM daily_plans").fetchone()["count"]
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(len(first.json()["problemIds"]), 3)
+        self.assertEqual(count, 1)
 
     def test_daily_endpoint_returns_three_topic_diverse_problems(self):
         response = self.client.get("/api/daily")

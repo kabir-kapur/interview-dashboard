@@ -8,6 +8,7 @@ from app.models import Evaluation, StatusInput, SubmissionInput, TRANSITIONS
 from app.services.review_agent import review_submission
 from app.services.database import connection, execute, run_migrations, uses_postgres
 from app.services.auth import require_api_auth
+from app.services.cron_auth import require_cron_secret
 from app.services.scheduler import current_day
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,6 +116,11 @@ def daily(refresh=False):
 def startup(): initialize()
 @app.get("/api/health")
 def health(): return {"ok": True}
+@app.get("/api/cron/generate-daily-plan", dependencies=[Depends(require_cron_secret)])
+def generate_daily_plan():
+    """Create today's plan once; noon UTC is 4 AM PST and 5 AM during Pacific daylight time."""
+    plan = daily()
+    return {"date": plan["date"], "problemIds": [problem["id"] for problem in plan["problems"]]}
 @api.get("/session")
 def session(): return {"ok": True}
 @api.get("/daily")
