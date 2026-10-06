@@ -9,8 +9,10 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import main
+from app import config, main
 from app.models import Evaluation, TRANSITIONS
+from app.routes import daily_plans
+from app.routes._shared import string_list
 from app.services.sms import SmsNotConfigured, build_daily_digest, send_sms
 from app.services.scheduler import current_day
 from app.services.database import connection, execute, run_migrations, target
@@ -29,7 +31,7 @@ class ModelTests(unittest.TestCase):
         self.assertIn("reviewed_complete", TRANSITIONS["attempted"])
 
     def test_scheduler_can_include_problems_without_topics(self):
-        selected = main.choose([
+        selected = daily_plans.choose([
             {"id": "untagged", "topics": []},
             {"id": "arrays", "topics": ["arrays"]},
             {"id": "graphs", "topics": ["graphs"]},
@@ -38,7 +40,7 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(set(selected), {"untagged", "arrays", "graphs"})
 
     def test_optional_problem_metadata_ignores_malformed_json(self):
-        self.assertEqual(main.string_list("[\"arrays\",\n"), [])
+        self.assertEqual(string_list("[\"arrays\",\n"), [])
 
     def test_daily_digest_contains_each_problem_and_dashboard_link(self):
         message = build_daily_digest({"problems": [{"title": "Two Sum"}, {"title": "Coin Change"}]}, "https://console.example")
@@ -75,8 +77,8 @@ class ModelTests(unittest.TestCase):
 class ApiTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.original_db = main.DB
-        main.DB = Path(self.temp_dir.name) / "test.db"
+        self.original_db = config.DB
+        config.DB = Path(self.temp_dir.name) / "test.db"
         self.auth_environment = patch.dict(
             "os.environ",
             {
@@ -94,7 +96,7 @@ class ApiTests(unittest.TestCase):
     def tearDown(self):
         self.client.__exit__(None, None, None)
         self.auth_environment.stop()
-        main.DB = self.original_db
+        config.DB = self.original_db
         self.temp_dir.cleanup()
 
     def test_health_check_is_public(self):
@@ -110,7 +112,7 @@ class ApiTests(unittest.TestCase):
 
     def test_cors_reads_the_configured_frontend_origins(self):
         with patch.dict("os.environ", {"CORS_ORIGINS": "https://dashboard.example"}):
-            origins = main.cors_origins()
+            origins = config.cors_origins()
 
         self.assertEqual(origins, ["https://dashboard.example"])
 
@@ -154,7 +156,7 @@ class ApiTests(unittest.TestCase):
         headers = {"Authorization": "Bearer test-cron-secret"}
         first = self.client.get("/api/cron/generate-daily-plan", headers=headers)
         second = self.client.get("/api/cron/generate-daily-plan", headers=headers)
-        with connection(main.DB) as con:
+        with connection(config.DB) as con:
             count = execute(con, "SELECT COUNT(*) AS count FROM daily_plans").fetchone()["count"]
 
         self.assertEqual(first.status_code, 200)

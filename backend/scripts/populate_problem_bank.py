@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.main import DB
+from app.config import DB
 from app.services.database import connection, execute, run_migrations
 
 
