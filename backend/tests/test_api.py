@@ -30,14 +30,23 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(TRANSITIONS["not_started"], {"attempted"})
         self.assertIn("reviewed_complete", TRANSITIONS["attempted"])
 
-    def test_scheduler_can_include_problems_without_topics(self):
-        selected = daily_plans.choose([
+    def test_plan_generator_can_include_problems_without_topics(self):
+        selected = daily_plans.generate_plan_ids([
             {"id": "untagged", "topics": []},
             {"id": "arrays", "topics": ["arrays"]},
             {"id": "graphs", "topics": ["graphs"]},
         ])
 
         self.assertEqual(set(selected), {"untagged", "arrays", "graphs"})
+
+    def test_plan_generator_includes_a_retry_before_new_work(self):
+        selected = daily_plans.generate_plan_ids([
+            {"id": "retry", "topics": ["graphs"], "status": "reviewed_needs_retry"},
+            {"id": "new-one", "topics": ["arrays"], "status": "not_started"},
+            {"id": "new-two", "topics": ["trees"], "status": "not_started"},
+        ])
+
+        self.assertEqual(selected[0], "retry")
 
     def test_optional_problem_metadata_ignores_malformed_json(self):
         self.assertEqual(string_list("[\"arrays\",\n"), [])

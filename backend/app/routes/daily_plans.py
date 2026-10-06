@@ -1,40 +1,25 @@
 """Daily-plan selection, persistence, and HTTP routes."""
 
 import json
-import random
 
 from fastapi import APIRouter
 
 from app import config
-from app.routes._shared import db, serialize_problem, serialize_submission
+from app.routes._shared import db, serialize_problem, serialize_submission, string_list
 from app.services.database import execute, uses_postgres
-from app.services.scheduler import current_day
+from app.services.scheduler import current_day, generate_plan_ids
 
 
 router = APIRouter()
 
 
-def problems(con) -> list[dict]:
-    """Load the canonical problem bank from the configured database."""
-    return [serialize_problem(row) for row in execute(con, "SELECT * FROM problems ORDER BY title").fetchall()]
-
-
-def choose(bank: list[dict]) -> list[str]:
-    """Pick up to three problems while preferring distinct topic buckets."""
-    buckets: dict[str, list[dict]] = {}
-    for problem in bank:
-        for topic in problem["topics"]:
-            buckets.setdefault(topic, []).append(problem)
-    picked: list[dict] = []
-    for topic in random.sample(list(buckets), len(buckets)):
-        choices = [problem for problem in buckets[topic] if problem not in picked]
-        if choices:
-            picked.append(random.choice(choices))
-        if len(picked) == 3:
-            break
-    remaining = [problem for problem in bank if problem not in picked]
-    picked.extend(random.sample(remaining, min(3 - len(picked), len(remaining))))
-    return [problem["id"] for problem in picked]
+def planning_candidates(con) -> list[dict]:
+    """Load only the metadata required to generate a daily plan."""
+    rows = execute(con, "SELECT id, topics, status FROM problems").fetchall()
+    return [
+        {"id": row["id"], "topics": string_list(row["topics"]), "status": row["status"]}
+        for row in rows
+    ]
 
 
 def saved_plan_ids(row) -> list[str]:
@@ -54,17 +39,17 @@ def daily(refresh: bool = False) -> dict:
     """Return today's persisted plan, generating it only when required."""
     day = current_day()
     with db() as con:
-        bank = problems(con)
-        lookup = {item["id"]: item for item in bank}
         row = execute(con, "SELECT * FROM daily_plans WHERE day=?", (day,)).fetchone()
         ids = saved_plan_ids(row) if row else []
-        if refresh or not row or any(item not in lookup for item in ids):
-            ids = choose(bank)
+        existing = set(row["id"] for row in execute(con, "SELECT id FROM problems WHERE id IN ({})".format(",".join("?" for _ in ids)), tuple(ids)).fetchall()) if ids else set()
+        if refresh or not row or any(problem_id not in existing for problem_id in ids):
+            ids = generate_plan_ids(planning_candidates(con))
             save_plan(con, day, ids)
         selected = []
         for problem_id in ids:
+            problem = execute(con, "SELECT * FROM problems WHERE id=?", (problem_id,)).fetchone()
             submission = execute(con, "SELECT * FROM submissions WHERE problem_id=? ORDER BY created_at DESC LIMIT 1", (problem_id,)).fetchone()
-            selected.append({**lookup[problem_id], "latestSubmission": serialize_submission(submission)})
+            selected.append({**serialize_problem(problem), "latestSubmission": serialize_submission(submission)})
         return {"date": day, "problems": selected}
 
 
