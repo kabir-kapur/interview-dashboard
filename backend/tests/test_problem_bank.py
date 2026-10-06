@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.database import connection, execute
-from app.services.problem_bank import collect_problems, normalize_problem, upsert_problems
+from scripts.populate_problem_bank import collect_problems, normalize_problem, upsert_problems
 
 
 class ProblemBankTests(unittest.TestCase):
