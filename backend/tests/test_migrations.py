@@ -47,8 +47,11 @@ class MigrationTests(unittest.TestCase):
                 "space_complexity",
                 "explanation",
                 "evaluation",
+                "completion_state",
+                "time_taken_minutes",
             },
             "concepts": {"id", "name", "mastery", "recency", "exposure_count"},
+            "problem_concepts": {"problem_id", "concept_id"},
         }
 
         with connection(self.database_path) as con:
@@ -56,9 +59,17 @@ class MigrationTests(unittest.TestCase):
                 actual = {row["name"] for row in execute(con, f"PRAGMA table_info({table})").fetchall()}
                 self.assertEqual(actual, columns)
             seeded = execute(con, "SELECT COUNT(*) AS count FROM problems").fetchone()
+            concepts = execute(con, "SELECT COUNT(*) AS count FROM concepts").fetchone()
+            dynamic_programming = execute(
+                con,
+                "SELECT mastery, recency, exposure_count FROM concepts WHERE id=?",
+                ("dynamic-programming",),
+            ).fetchone()
             tables = {row["name"] for row in execute(con, "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
         self.assertEqual(seeded["count"], 8)
+        self.assertEqual(concepts["count"], 64)
+        self.assertEqual(tuple(dynamic_programming), (0.0, None, 0))
         self.assertNotIn("progress", tables)
         self.assertNotIn("digest_deliveries", tables)
     def test_rerunning_migrations_preserves_existing_data_and_records_one_version(self):
@@ -77,7 +88,10 @@ class MigrationTests(unittest.TestCase):
             versions = execute(con, "SELECT version FROM schema_migrations ORDER BY version").fetchall()
 
         self.assertEqual(progress["status"], "attempted")
-        self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql"])
+        self.assertEqual(
+            [row["version"] for row in versions],
+            ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql", "007_seed_leetcode_concepts.sql", "008_submission_outcomes.sql", "009_problem_concepts.sql"],
+        )
 
     def test_problem_metadata_is_optional(self):
         run_migrations(self.database_path)

@@ -4,7 +4,7 @@ Run scripts from the repository root. They use `DATABASE_URL` when supplied; oth
 
 ## Populate the problem bank
 
-This one-shot importer fetches free LeetCode problem metadata, full sanitized HTML prompts, numeric IDs, and Python 3 starter code. It first applies pending database migrations, then upserts the imported records without changing existing problem statuses.
+This one-shot importer fetches free LeetCode problem metadata, full sanitized HTML prompts, numeric IDs, and Python 3 starter code. It first applies pending database migrations, then upserts the imported records without changing existing problem statuses. LeetCode topic tags are retained as source metadata and mapped to canonical problem-concept associations when a matching concept exists.
 
 ```sh
 DATABASE_URL='your Supabase transaction-pooler URL' \

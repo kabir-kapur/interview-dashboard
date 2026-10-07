@@ -7,6 +7,10 @@ import { request } from "../lib/api";
 import { Problem } from "../lib/types";
 
 const value = (data: FormData, key: string) => data.get(key)?.toString().trim() || undefined;
+const numberValue = (data: FormData, key: string) => {
+  const value = data.get(key)?.toString().trim();
+  return value ? Number(value) : undefined;
+};
 
 export function ProblemSubmissionPage({ problemId }: { problemId: string }) {
   const [problem, setProblem] = useState<Problem>();
@@ -18,7 +22,7 @@ export function ProblemSubmissionPage({ problemId }: { problemId: string }) {
     event.preventDefault();
     if (!problem) return;
     const data = new FormData(event.currentTarget);
-    const submission = await request(`/problems/${problem.id}/submissions`, { method: "POST", body: JSON.stringify({ code: value(data, "code"), timeComplexity: value(data, "time"), spaceComplexity: value(data, "space"), explanation: value(data, "explanation") }) });
+    const submission = await request(`/problems/${problem.id}/submissions`, { method: "POST", body: JSON.stringify({ code: value(data, "code"), timeComplexity: value(data, "time"), spaceComplexity: value(data, "space"), explanation: value(data, "explanation"), completionState: value(data, "completionState"), timeTakenMinutes: numberValue(data, "timeTakenMinutes") }) });
     update({ ...problem, status: "attempted", latestSubmission: submission });
   };
   const review = async () => {

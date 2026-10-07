@@ -40,6 +40,11 @@ def create_submission(problem_id: str, body: SubmissionInput):
     with db() as con:
         if not execute(con, "SELECT id FROM problems WHERE id=?", (problem_id,)).fetchone():
             raise HTTPException(404, "Problem not found")
-        execute(con, "INSERT INTO submissions VALUES (?,?,?,?,?,?,?,NULL)", (submission_id, problem_id, created, body.code, body.timeComplexity, body.spaceComplexity, body.explanation))
+        execute(
+            con,
+            """INSERT INTO submissions (id, problem_id, created_at, code, time_complexity, space_complexity, explanation, completion_state, time_taken_minutes, evaluation)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
+            (submission_id, problem_id, created, body.code, body.timeComplexity, body.spaceComplexity, body.explanation, body.completionState, body.timeTakenMinutes),
+        )
         execute(con, "UPDATE problems SET status='attempted', status_updated_at=? WHERE id=?", (created, problem_id))
     return {"id": submission_id, "problemId": problem_id, "createdAt": created, **body.model_dump(), "evaluation": None}

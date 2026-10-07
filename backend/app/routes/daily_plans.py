@@ -5,7 +5,7 @@ import json
 from fastapi import APIRouter
 
 from app import config
-from app.routes._shared import db, serialize_problem, serialize_submission, string_list
+from app.routes._shared import db, problem_concepts, serialize_problem, serialize_submission, string_list
 from app.services.database import execute, uses_postgres
 from app.services.scheduler import current_day, generate_plan_ids
 
@@ -49,7 +49,10 @@ def daily(refresh: bool = False) -> dict:
         for problem_id in ids:
             problem = execute(con, "SELECT * FROM problems WHERE id=?", (problem_id,)).fetchone()
             submission = execute(con, "SELECT * FROM submissions WHERE problem_id=? ORDER BY created_at DESC LIMIT 1", (problem_id,)).fetchone()
-            selected.append({**serialize_problem(problem), "latestSubmission": serialize_submission(submission)})
+            selected.append({
+                **serialize_problem(problem, problem_concepts(con, problem_id)),
+                "latestSubmission": serialize_submission(submission),
+            })
         return {"date": day, "problems": selected}
 
 

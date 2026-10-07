@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import DB
+from app.models import normalize_difficulty
 from app.services.database import connection, execute, run_migrations
 
 
@@ -56,6 +57,11 @@ def sanitize_prompt(content: str | None, title: str) -> str:
     parser = PromptSanitizer()
     parser.feed(content)
     return "".join(parser.parts)
+
+
+def concept_id_for_tag(tag: str) -> str:
+    """Map a LeetCode tag to its canonical slug; unknown tags are ignored at write time."""
+    return "-".join(part for part in "".join(character if character.isalnum() else " " for character in tag.lower()).split())
 
 
 def fetch_leetcode_problems(limit: int, offset: int) -> list[dict]:
@@ -119,7 +125,8 @@ def normalize_problem(question: dict, detail: dict | None = None) -> dict:
         "source_id": (detail or {}).get("questionFrontendId") or question.get("questionFrontendId"),
         "starter_code": next((snippet["code"] for snippet in (detail or {}).get("codeSnippets", []) if snippet["langSlug"] == "python3"), None),
         "topics": [tag["name"] for tag in question.get("topicTags", [])],
-        "difficulty": question.get("difficulty", "").title() or None,
+        "concept_ids": [concept_id_for_tag(tag["name"]) for tag in question.get("topicTags", [])],
+        "difficulty": normalize_difficulty(question.get("difficulty")),
         "companies": None,
     }
 
@@ -154,10 +161,19 @@ def upsert_problems(database: Path, problems: list[dict]) -> int:
                      topics=excluded.topics, difficulty=excluded.difficulty, companies=excluded.companies""",
                 (
                     problem["id"], problem["title"], problem["prompt"], problem["link"], problem["source_id"], problem["starter_code"],
-                    json.dumps(problem["topics"]), problem["difficulty"],
+                    json.dumps(problem["topics"]), normalize_difficulty(problem.get("difficulty")),
                     json.dumps(problem["companies"]) if problem["companies"] else None,
                 ),
             )
+            execute(con, "DELETE FROM problem_concepts WHERE problem_id=?", (problem["id"],))
+            for concept_id in dict.fromkeys(problem.get("concept_ids", [])):
+                execute(
+                    con,
+                    """INSERT INTO problem_concepts(problem_id, concept_id)
+                       SELECT ?, id FROM concepts WHERE id=?
+                       ON CONFLICT(problem_id, concept_id) DO NOTHING""",
+                    (problem["id"], concept_id),
+                )
     return len(problems)
 
 

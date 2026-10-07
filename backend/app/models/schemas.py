@@ -11,6 +11,9 @@ Status = Literal[
     "reviewed_complete",
 ]
 
+CompletionState = Literal["solved_independently", "hint_used", "gave_up"]
+Difficulty = Literal["EASY", "MEDIUM", "HARD"]
+
 TRANSITIONS = {
     "not_started": {"attempted"},
     "attempted": {"attempted", "solved", "reviewed_needs_retry", "reviewed_complete"},
@@ -25,6 +28,8 @@ class SubmissionInput(BaseModel):
     timeComplexity: str | None = None
     spaceComplexity: str | None = None
     explanation: str | None = None
+    completionState: CompletionState | None = None
+    timeTakenMinutes: int | None = Field(default=None, ge=0)
 
 
 class Evaluation(BaseModel):
@@ -51,3 +56,9 @@ class Concept(BaseModel):
     mastery: float = Field(default=0.0, ge=0.0, le=1.0)
     recency: datetime | None = None
     exposureCount: int = Field(default=0, ge=0)
+
+
+def normalize_difficulty(value: object) -> Difficulty | None:
+    """Return a supported difficulty value or omit unrecognized source data."""
+    normalized = value.strip().upper() if isinstance(value, str) else ""
+    return normalized if normalized in {"EASY", "MEDIUM", "HARD"} else None

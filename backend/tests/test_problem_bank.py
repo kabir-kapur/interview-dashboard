@@ -18,6 +18,8 @@ class ProblemBankTests(unittest.TestCase):
 
         self.assertEqual(problem["id"], "two-sum")
         self.assertEqual(problem["topics"], ["Array"])
+        self.assertEqual(problem["concept_ids"], ["array"])
+        self.assertEqual(problem["difficulty"], "EASY")
         self.assertEqual(problem["link"], "https://leetcode.com/problems/two-sum/")
 
     def test_collect_problems_skips_paid_questions_and_pages_until_full(self):
@@ -42,18 +44,20 @@ class ProblemBankTests(unittest.TestCase):
     def test_upsert_preserves_status_while_refreshing_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "bank.db"
-            original = {"id": "two-sum", "title": "Two Sum", "prompt": "Old", "link": "https://old", "source_id": "1", "starter_code": "class Solution:", "topics": ["Array"], "difficulty": "Easy", "companies": None}
+            original = {"id": "two-sum", "title": "Two Sum", "prompt": "Old", "link": "https://old", "source_id": "1", "starter_code": "class Solution:", "topics": ["Array"], "concept_ids": ["array"], "difficulty": "EASY", "companies": None}
             upsert_problems(database, [original])
             with connection(database) as con:
                 execute(con, "UPDATE problems SET status='attempted' WHERE id=?", (original["id"],))
-            updated = {**original, "prompt": "New", "topics": ["Hash Table"]}
+            updated = {**original, "prompt": "New", "topics": ["Hash Table"], "concept_ids": ["hash-table"]}
             upsert_problems(database, [updated])
             with connection(database) as con:
                 row = execute(con, "SELECT prompt, topics, status FROM problems WHERE id=?", (original["id"],)).fetchone()
+                concepts = execute(con, "SELECT concept_id FROM problem_concepts WHERE problem_id=?", (original["id"],)).fetchall()
 
         self.assertEqual(row["prompt"], "New")
         self.assertEqual(row["topics"], '["Hash Table"]')
         self.assertEqual(row["status"], "attempted")
+        self.assertEqual([concept["concept_id"] for concept in concepts], ["hash-table"])
 
     def test_normalize_problem_sanitizes_html_and_reads_the_python_template(self):
         problem = normalize_problem(
@@ -63,6 +67,23 @@ class ProblemBankTests(unittest.TestCase):
 
         self.assertEqual(problem["source_id"], "1")
         self.assertEqual(problem["starter_code"], "class Solution:")
-        self.assertEqual(problem["difficulty"], "Easy")
+        self.assertEqual(problem["difficulty"], "EASY")
         self.assertIn("<code>two</code>", problem["prompt"])
         self.assertNotIn("<script>", problem["prompt"])
+
+    def test_upsert_discards_unmapped_topic_tags_without_losing_source_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "bank.db"
+            problem = {
+                "id": "custom", "title": "Custom", "prompt": "Prompt", "link": None,
+                "source_id": None, "starter_code": None, "topics": ["Unknown Tag"],
+                "concept_ids": ["unknown-tag"], "difficulty": "IMPOSSIBLE", "companies": None,
+            }
+            upsert_problems(database, [problem])
+            with connection(database) as con:
+                row = execute(con, "SELECT topics, difficulty FROM problems WHERE id=?", ("custom",)).fetchone()
+                concepts = execute(con, "SELECT concept_id FROM problem_concepts WHERE problem_id=?", ("custom",)).fetchall()
+
+        self.assertEqual(row["topics"], '["Unknown Tag"]')
+        self.assertIsNone(row["difficulty"])
+        self.assertEqual(concepts, [])

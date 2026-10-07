@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import config, main
-from app.models import Concept, Evaluation, TRANSITIONS
+from app.models import Concept, Evaluation, TRANSITIONS, normalize_difficulty
 from app.routes import daily_plans
-from app.routes._shared import string_list
+from app.routes._shared import problem_concepts, string_list
 from app.services.sms import SmsNotConfigured, build_daily_digest, send_sms
 from app.services.scheduler import current_day
 from app.services.database import connection, execute, run_migrations, target
@@ -31,6 +31,11 @@ class ModelTests(unittest.TestCase):
         concept = Concept(id="graphs", name="Graphs", recency="2026-10-07T12:00:00Z")
 
         self.assertEqual(concept.recency, datetime(2026, 10, 7, 12, tzinfo=timezone.utc))
+
+    def test_difficulty_normalization_accepts_only_the_discrete_domain(self):
+        self.assertEqual(normalize_difficulty("Medium"), "MEDIUM")
+        self.assertEqual(normalize_difficulty(" hard "), "HARD")
+        self.assertIsNone(normalize_difficulty("Expert"))
 
     def test_evaluation_allows_unassessable_submission(self):
         evaluation = Evaluation(retryRecommended=True)
@@ -90,7 +95,7 @@ class ModelTests(unittest.TestCase):
 
             self.assertEqual(
                 [row["version"] for row in versions],
-                ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql"],
+                ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql", "007_seed_leetcode_concepts.sql", "008_submission_outcomes.sql", "009_problem_concepts.sql"],
             )
             self.assertTrue(tables)
 
@@ -205,6 +210,16 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["id"], problem_id)
+        self.assertEqual(response.json()["concepts"], [])
+
+    def test_problem_concepts_are_serialized_with_learning_state(self):
+        with connection(config.DB) as con:
+            execute(con, "INSERT INTO problem_concepts(problem_id, concept_id) VALUES (?, ?)", ("two-sum", "array"))
+            concepts = problem_concepts(con, "two-sum")
+
+        self.assertEqual(concepts[0]["id"], "array")
+        self.assertEqual(concepts[0]["mastery"], 0.0)
+        self.assertIsNone(concepts[0]["recency"])
 
     def test_submission_then_review_updates_problem_status(self):
         problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]
@@ -220,6 +235,18 @@ class ApiTests(unittest.TestCase):
         daily_problem = next(problem for problem in self.client.get("/api/daily").json()["problems"] if problem["id"] == problem_id)
         self.assertEqual(daily_problem["status"], "reviewed_needs_retry")
         self.assertTrue(daily_problem["latestSubmission"]["evaluation"]["retryRecommended"])
+
+    def test_submission_can_record_optional_outcome_signals(self):
+        problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]
+
+        response = self.client.post(
+            f"/api/problems/{problem_id}/submissions",
+            json={"code": "return answer", "completionState": "hint_used", "timeTakenMinutes": 23},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["completionState"], "hint_used")
+        self.assertEqual(response.json()["timeTakenMinutes"], 23)
 
     def test_cannot_mark_unstarted_problem_as_solved(self):
         problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]

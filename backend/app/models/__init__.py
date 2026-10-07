@@ -1,3 +1,3 @@
-from .schemas import Concept, Evaluation, Status, StatusInput, SubmissionInput, TRANSITIONS
+from .schemas import CompletionState, Concept, Difficulty, Evaluation, Status, StatusInput, SubmissionInput, TRANSITIONS, normalize_difficulty
 
-__all__ = ["Concept", "Evaluation", "Status", "StatusInput", "SubmissionInput", "TRANSITIONS"]
+__all__ = ["CompletionState", "Concept", "Difficulty", "Evaluation", "Status", "StatusInput", "SubmissionInput", "TRANSITIONS", "normalize_difficulty"]
