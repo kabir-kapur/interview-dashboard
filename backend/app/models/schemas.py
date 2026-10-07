@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Status = Literal[
     "not_started",
@@ -40,3 +41,13 @@ class Evaluation(BaseModel):
 
 class StatusInput(BaseModel):
     status: Status
+
+
+class Concept(BaseModel):
+    """Track a concept with normalized mastery and its most recent exposure time."""
+
+    id: str
+    name: str
+    mastery: float = Field(default=0.0, ge=0.0, le=1.0)
+    recency: datetime | None = None
+    exposureCount: int = Field(default=0, ge=0)

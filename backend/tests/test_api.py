@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from base64 import b64encode
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,7 +11,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import config, main
-from app.models import Evaluation, TRANSITIONS
+from app.models import Concept, Evaluation, TRANSITIONS
 from app.routes import daily_plans
 from app.routes._shared import string_list
 from app.services.sms import SmsNotConfigured, build_daily_digest, send_sms
@@ -19,6 +20,18 @@ from app.services.database import connection, execute, run_migrations, target
 
 
 class ModelTests(unittest.TestCase):
+    def test_concept_defaults_to_an_unseen_unmastered_signal(self):
+        concept = Concept(id="graphs", name="Graphs")
+
+        self.assertEqual(concept.mastery, 0.0)
+        self.assertIsNone(concept.recency)
+        self.assertEqual(concept.exposureCount, 0)
+
+    def test_concept_parses_recency_as_a_timestamp(self):
+        concept = Concept(id="graphs", name="Graphs", recency="2026-10-07T12:00:00Z")
+
+        self.assertEqual(concept.recency, datetime(2026, 10, 7, 12, tzinfo=timezone.utc))
+
     def test_evaluation_allows_unassessable_submission(self):
         evaluation = Evaluation(retryRecommended=True)
 
@@ -75,7 +88,10 @@ class ModelTests(unittest.TestCase):
                 versions = execute(con, "SELECT version FROM schema_migrations").fetchall()
                 tables = execute(con, "SELECT name FROM sqlite_master WHERE type='table' AND name='submissions'").fetchall()
 
-            self.assertEqual([row["version"] for row in versions], ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql"])
+            self.assertEqual(
+                [row["version"] for row in versions],
+                ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql"],
+            )
             self.assertTrue(tables)
 
     def test_database_url_overrides_local_sqlite_path(self):
