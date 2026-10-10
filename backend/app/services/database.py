@@ -56,7 +56,10 @@ def execute_script(con: object, script: str) -> None:
     if isinstance(con, sqlite3.Connection):
         con.executescript(script)
         return
-    for statement in script.split(";"):
+    # PostgreSQL executes statements individually, so remove whole-line SQL comments
+    # before splitting; a semicolon inside a comment is not a statement boundary.
+    sql = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("--"))
+    for statement in sql.split(";"):
         if statement.strip():
             con.execute(statement)
 

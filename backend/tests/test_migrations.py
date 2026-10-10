@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services.database import connection, execute, run_migrations
+from app.services.database import connection, execute, execute_script, run_migrations
 
 
 class MigrationTests(unittest.TestCase):
@@ -113,6 +113,19 @@ class MigrationTests(unittest.TestCase):
         self.assertNotIn("autoincrement", migration)
         self.assertNotIn("pragma", migration)
         self.assertNotIn("sqlite_", migration)
+
+    def test_postgres_script_runner_ignores_semicolons_in_line_comments(self):
+        class FakePostgresConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement):
+                self.statements.append(statement.strip())
+
+        con = FakePostgresConnection()
+        execute_script(con, "-- Comment containing a semicolon; must not split SQL.\nCREATE TABLE example (id TEXT);\n")
+
+        self.assertEqual(con.statements, ["CREATE TABLE example (id TEXT)"])
 
     def test_postgres_plan_migration_uses_a_native_id_array(self):
         migration = (Path(__file__).resolve().parents[1] / "migrations" / "003_postgres_plan_arrays.postgres.sql").read_text()
