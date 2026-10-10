@@ -1,4 +1,5 @@
 import sys
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +50,7 @@ class MigrationTests(unittest.TestCase):
                 "evaluation",
                 "completion_state",
                 "time_taken_minutes",
+                "outcome_score",
             },
             "concepts": {"id", "name", "mastery", "recency", "exposure_count"},
             "problem_concepts": {"problem_id", "concept_id"},
@@ -90,7 +92,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(progress["status"], "attempted")
         self.assertEqual(
             [row["version"] for row in versions],
-            ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql", "007_seed_leetcode_concepts.sql", "008_submission_outcomes.sql", "009_problem_concepts.sql"],
+            ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql", "007_seed_leetcode_concepts.sql", "008_submission_outcomes.sql", "009_problem_concepts.sql", "010_submission_outcome_scores.sql"],
         )
 
     def test_problem_metadata_is_optional(self):
@@ -105,6 +107,17 @@ class MigrationTests(unittest.TestCase):
         with connection(self.database_path) as con:
             row = execute(con, "SELECT topics, difficulty, companies FROM problems WHERE id=?", ("custom",)).fetchone()
         self.assertEqual(tuple(row), (None, None, None))
+
+    def test_submission_outcome_score_stays_normalized(self):
+        run_migrations(self.database_path)
+
+        with connection(self.database_path) as con:
+            with self.assertRaises(sqlite3.IntegrityError):
+                execute(
+                    con,
+                    "INSERT INTO submissions(id, problem_id, created_at, code, outcome_score) VALUES (?, ?, ?, ?, ?)",
+                    ("invalid-score", "two-sum", "now", "return answer", 1.1),
+                )
 
     def test_migration_files_remain_portable_to_postgresql(self):
         migration_dir = Path(__file__).resolve().parents[1] / "migrations"

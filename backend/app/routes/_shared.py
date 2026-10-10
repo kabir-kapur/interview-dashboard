@@ -69,6 +69,7 @@ def serialize_submission(row) -> dict | None:
         "code": row["code"], "timeComplexity": row["time_complexity"],
         "spaceComplexity": row["space_complexity"], "explanation": row["explanation"],
         "completionState": row["completion_state"], "timeTakenMinutes": row["time_taken_minutes"],
+        "outcomeScore": row["outcome_score"],
         "evaluation": json.loads(row["evaluation"]) if row["evaluation"] else None,
     }
 

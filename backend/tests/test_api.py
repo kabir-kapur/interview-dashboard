@@ -95,7 +95,7 @@ class ModelTests(unittest.TestCase):
 
             self.assertEqual(
                 [row["version"] for row in versions],
-                ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql", "007_seed_leetcode_concepts.sql", "008_submission_outcomes.sql", "009_problem_concepts.sql"],
+                ["001_initial.sql", "002_persist_problem_bank.sql", "005_problem_source_fields.sql", "006_concepts.sql", "007_seed_leetcode_concepts.sql", "008_submission_outcomes.sql", "009_problem_concepts.sql", "010_submission_outcome_scores.sql"],
             )
             self.assertTrue(tables)
 
@@ -247,6 +247,66 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["completionState"], "hint_used")
         self.assertEqual(response.json()["timeTakenMinutes"], 23)
+        self.assertEqual(response.json()["outcomeScore"], 0.4)
+
+    def test_submission_updates_linked_concept_learning_state(self):
+        with connection(config.DB) as con:
+            execute(con, "INSERT INTO problem_concepts(problem_id, concept_id) VALUES (?, ?)", ("two-sum", "array"))
+
+        response = self.client.post(
+            "/api/problems/two-sum/submissions",
+            json={"code": "return answer", "completionState": "solved_independently", "timeTakenMinutes": 20},
+        )
+
+        with connection(config.DB) as con:
+            concept = execute(
+                con,
+                "SELECT mastery, exposure_count, recency FROM concepts WHERE id=?",
+                ("array",),
+            ).fetchone()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["outcomeScore"], 1.0)
+        self.assertEqual(self.client.get("/api/problems/two-sum").json()["latestSubmission"]["outcomeScore"], 1.0)
+        self.assertEqual(concept["mastery"], 0.6)
+        self.assertEqual(concept["exposure_count"], 1)
+        self.assertIsNotNone(concept["recency"])
+
+    def test_submission_splits_learning_update_equally_across_two_concepts(self):
+        with connection(config.DB) as con:
+            execute(con, "INSERT INTO problem_concepts(problem_id, concept_id) VALUES (?, ?)", ("two-sum", "array"))
+            execute(con, "INSERT INTO problem_concepts(problem_id, concept_id) VALUES (?, ?)", ("two-sum", "hash-table"))
+
+        response = self.client.post(
+            "/api/problems/two-sum/submissions",
+            json={"code": "return answer", "completionState": "solved_independently"},
+        )
+
+        with connection(config.DB) as con:
+            concepts = execute(
+                con,
+                "SELECT id, mastery, exposure_count FROM concepts WHERE id IN (?, ?) ORDER BY id",
+                ("array", "hash-table"),
+            ).fetchall()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([(row["id"], row["mastery"], row["exposure_count"]) for row in concepts], [("array", 0.3, 1), ("hash-table", 0.3, 1)])
+
+    def test_submission_without_concepts_persists_without_changing_concept_state(self):
+        with connection(config.DB) as con:
+            before = execute(con, "SELECT SUM(exposure_count) AS total FROM concepts").fetchone()["total"]
+
+        response = self.client.post(
+            "/api/problems/two-sum/submissions",
+            json={"code": "return answer", "completionState": "solved_independently"},
+        )
+
+        with connection(config.DB) as con:
+            after = execute(con, "SELECT SUM(exposure_count) AS total FROM concepts").fetchone()["total"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(before, after)
+        self.assertEqual(self.client.get("/api/problems/two-sum").json()["latestSubmission"]["id"], response.json()["id"])
 
     def test_cannot_mark_unstarted_problem_as_solved(self):
         problem_id = self.client.get("/api/daily").json()["problems"][0]["id"]

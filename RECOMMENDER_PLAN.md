@@ -49,6 +49,7 @@ Concept {
 ```
 
 `competence`:
+
 - range `[0,1]`
 - initialize to `0`
 - represents demonstrated competence
@@ -399,6 +400,7 @@ completedInDay = 0
 Define expected behavior after Day 5 explicitly.
 
 For MVP, choose one simple behavior:
+
 - remain in Day-5/interleaved mode, or
 - reset/start another cycle
 
@@ -653,6 +655,7 @@ competence = 0
 ```
 
 Expected:
+
 - canonical/easier problems should dominate
 - unseen concepts should be eligible
 
@@ -664,6 +667,7 @@ low competence
 ```
 
 Expected:
+
 - concept gets learning priority
 - but recent redundancy prevents endless repetition
 
@@ -674,23 +678,27 @@ high competence
 ```
 
 Expected:
+
 - Medium/Hard difficulty fit increases
 - trivial Easy problems lose ranking value
 
 ### Recently drilled concept
 
 Expected:
+
 - redundancy suppresses immediate repetition
 - concept can return later through recency
 
 ### Returning learner
 
 Expected:
+
 - old practiced concepts gain recency priority again
 
 ### Multi-concept problem
 
 Expected:
+
 - all relevant concept states contribute equally
 
 ## Calibration
@@ -717,6 +725,9 @@ The purpose of MVP calibration is to avoid obviously bad behavior, not prove opt
 
 Do not block MVP on:
 
+- LeetCode acceptance-rate ingestion: add a nullable problem field, populate it through
+the existing importer, and use it only as an optional calibration/tie-break signal.
+It must not replace concept state or become a hard eligibility constraint.
 - persistent recommendation logging
 - score-component audit history
 - prompt/model version logging
