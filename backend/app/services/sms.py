@@ -4,6 +4,8 @@ import os
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from app.services.const import TWILIO_REQUEST_TIMEOUT_SECONDS
+
 
 class SmsNotConfigured(RuntimeError):
     """Raised when the deployment has not supplied SMS credentials."""
@@ -31,5 +33,5 @@ def send_sms(body: str) -> str:
         headers={"Authorization": f"Basic {token}", "Content-Type": "application/x-www-form-urlencoded"},
         method="POST",
     )
-    with urlopen(request, timeout=15) as response:
+    with urlopen(request, timeout=TWILIO_REQUEST_TIMEOUT_SECONDS) as response:
         return json.loads(response.read())["sid"]

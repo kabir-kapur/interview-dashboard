@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from app.models import StatusInput, SubmissionInput, TRANSITIONS
 from app.routes._shared import db, now, problem_detail
 from app.services.database import execute
-from app.services.learning import outcome_score, update_concept_learning
+from app.services.recommender import outcome_score, update_concept_learning
 
 
 router = APIRouter()

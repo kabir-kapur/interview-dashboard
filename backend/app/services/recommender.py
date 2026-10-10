@@ -1,18 +1,18 @@
-"""Deterministic concept-learning updates derived from submissions."""
+"""Deterministic recommender updates derived from submissions."""
 
 from math import sqrt
 
-from app import config
+from app.services.const import BASE_MASTERY_LEARNING_RATE, OUTCOME_SCORES, SLOW_SOLVE_MINUTES
 from app.services.database import execute
 
 
 def outcome_score(completion_state: str | None, time_taken_minutes: int | None) -> float | None:
     """Map the available deterministic attempt outcome to a normalized score."""
     if completion_state == "solved_independently":
-        if time_taken_minutes is not None and time_taken_minutes >= config.SLOW_SOLVE_MINUTES:
-            return config.OUTCOME_SCORES["solved_independently_slow"]
-        return config.OUTCOME_SCORES[completion_state]
-    return config.OUTCOME_SCORES.get(completion_state)
+        if time_taken_minutes is not None and time_taken_minutes >= SLOW_SOLVE_MINUTES:
+            return OUTCOME_SCORES["solved_independently_slow"]
+        return OUTCOME_SCORES[completion_state]
+    return OUTCOME_SCORES.get(completion_state)
 
 
 def update_concept_learning(con: object, problem_id: str, score: float | None, practiced_at: str) -> None:
@@ -31,7 +31,7 @@ def update_concept_learning(con: object, problem_id: str, score: float | None, p
     for concept in concepts:
         values = [concept["exposure_count"] + 1, practiced_at, concept["id"]]
         if score is not None:
-            learning_rate = config.BASE_MASTERY_LEARNING_RATE / sqrt(concept["exposure_count"] + 1)
+            learning_rate = BASE_MASTERY_LEARNING_RATE / sqrt(concept["exposure_count"] + 1)
             mastery = concept["mastery"] + (learning_rate * attribution * (score - concept["mastery"]))
             values.insert(0, mastery)
             execute(
