@@ -76,7 +76,7 @@ def calculate_problem_recency(concepts: list[dict], now: datetime) -> float | No
 
 
 def calculate_problem_mastery_gap(concepts: list[dict]) -> float | None:
-    """Average the remaining mastery gap across a problem's concepts."""
+    """Use an MVP arithmetic mean; concept interactions can replace it later."""
     if not concepts:
         return None
     return sum(1 - concept["mastery"] for concept in concepts) / len(concepts)
